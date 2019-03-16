@@ -353,9 +353,129 @@ mean(pred_test == testset$y)
 #plot model
 plot(svm_model, trainset)
 
+### 4. RBF
 
+#number of data points
+n <- 1000
 
+#set seed
+set.seed(1)
 
+#create dataframe
+df <- data.frame(x1 = rnorm(n, mean = -.5, sd = 1), 
+                 x2 = runif(n, min = -1, max = 1))
+
+#set radius and centers
+radius <-  .8
+center_1 <- c(-.8, 0)
+center_2 <- c(.8, 0)
+radius_squared <- radius^2
+
+#create binary classification variable
+df$y <- factor(ifelse((df$x1-center_1[1])^2 + (df$x2-center_1[2])^2 < radius_squared|
+                      (df$x1-center_2[1])^2 + (df$x2-center_2[2])^2 < radius_squared, -1, 1),
+                      levels = c(-1, 1))
+
+# Load ggplot2
+library(ggplot2)
+
+# Plot x2 vs. x1, colored by y
+scatter_plot<- ggplot(data = df, aes(x = x1, y = x2, color = y)) + 
+    # Add a point layer
+    geom_point() + 
+    scale_color_manual(values = c("red", "blue")) +
+    # Specify equal coordinates
+    coord_equal()
+ 
+scatter_plot 
+
+#build model
+svm_model<- 
+    svm(y ~ ., data = trainset, type = "C-classification", 
+        kernel = "linear")
+
+#accuracy
+pred_train <- predict(svm_model, trainset)
+mean(pred_train == trainset$y)
+pred_test <- predict(svm_model, testset)
+mean(pred_test == testset$y)
+
+#plot model against testset
+plot(svm_model, testset)
+
+#build model
+svm_model<- 
+    svm(y ~ ., data = trainset, type = "C-classification", 
+        kernel = "polynomial", degree = 2)
+
+#accuracy
+pred_train <- predict(svm_model, trainset)
+mean(pred_train == trainset$y)
+pred_test <- predict(svm_model, testset)
+mean(pred_test == testset$y)
+
+#plot model
+plot(svm_model, trainset)
+
+#create vector to store accuracies and set random number seed
+accuracy <- rep(NA, 100)
+set.seed(2)
+
+#calculate accuracies for 100 training/test partitions
+for (i in 1:100){
+    df[, "train"] <- ifelse(runif(nrow(df))<0.8, 1, 0)
+    trainset <- df[df$train == 1, ]
+    testset <- df[df$train == 0, ]
+    trainColNum <- grep("train", names(trainset))
+    trainset <- trainset[, -trainColNum]
+    testset <- testset[, -trainColNum]
+    svm_model<- svm(y ~ ., data = trainset, type = "C-classification", kernel = "polynomial", degree = 2)
+    pred_test <- predict(svm_model, testset)
+    accuracy[i] <- mean(pred_test == testset$y)
+}
+
+#print average accuracy and standard deviation
+mean(accuracy)
+sd(accuracy)
+
+#create vector to store accuracies and set random number seed
+accuracy <- rep(NA, 100)
+set.seed(2)
+
+#calculate accuracies for 100 training/test partitions
+for (i in 1:100){
+    df[, "train"] <- ifelse(runif(nrow(df))<0.8, 1, 0)
+    trainset <- df[df$train == 1, ]
+    testset <- df[df$train == 0, ]
+    trainColNum <- grep("train", names(trainset))
+    trainset <- trainset[, -trainColNum]
+    testset <- testset[, -trainColNum]
+    svm_model<- svm(y ~ ., data = trainset, type = "C-classification", kernel = "radial")
+    pred_test <- predict(svm_model, testset)
+    accuracy[i] <- mean(pred_test == testset$y)
+}
+
+#print average accuracy and standard deviation
+mean(accuracy)
+sd(accuracy)
+
+#tune model
+tune_out <- tune.svm(x = trainset[, -3], y = trainset[, 3], 
+                     gamma = 5*10^(-2:2), 
+                     cost = c(0.01, 0.1, 1, 10, 100), 
+                     type = "C-classification", kernel = "radial")
+
+#build tuned model
+svm_model <- svm(y~ ., data = trainset, type = "C-classification", kernel = "radial", 
+                 cost = tune_out$best.parameters$cost, 
+                 gamma = tune_out$best.parameters$gamma)
+
+#calculate test accuracy
+pred_test <- predict(svm_model, testset)
+mean(pred_test == testset$y)
+
+#Plot decision boundary against test data
+plot(svm_model, testset)
 
 
 
