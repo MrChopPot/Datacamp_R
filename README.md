@@ -1,2 +1,2 @@
 # Datacamp_R
-R Codes for Datacamp.com
+R Codes for Course Assignments on Datacamp.com
