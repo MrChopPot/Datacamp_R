@@ -353,6 +353,8 @@ mean(pred_test == testset$y)
 #plot model
 plot(svm_model, trainset)
 
+#######################
+
 ### 4. RBF
 
 #number of data points
