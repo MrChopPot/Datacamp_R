@@ -192,5 +192,193 @@ accuracy(testing_results, truth = Remote, estimate = `Random forest`)
 ppv(testing_results, truth = Remote, estimate = `Logistic regression`)
 ppv(testing_results, truth = Remote, estimate = `Random forest`)
 
+#######################
 
+### 3. Get out the vote
+
+# Load tidyverse
+library(tidyverse)
+
+# Print voters
+voters
+
+# How many people voted?
+voters %>%
+    count(turnout16_2016)
+
+# How do the reponses on the survey vary with voting behavior?
+voters %>%
+    group_by(turnout16_2016) %>%
+    summarise(`Elections don't matter` = mean(RIGGED_SYSTEM_1_2016 <= 2),
+              `Economy is getting better` = mean(econtrend_2016 == 1),
+              `Crime is very important` = mean(imiss_a_2016 == 2))
+
+## Visualize difference by voter turnout
+voters %>%
+    ggplot(aes(econtrend_2016, ..density.., fill = turnout16_2016)) +
+    geom_histogram(alpha = 0.5, position = "identity", binwidth = 1) +
+    labs(title = "Overall, is the economy getting better or worse?")
+
+# Remove the case_indetifier column
+voters_select <- voters %>%
+        select(-case_identifier)
+
+# Build a simple logistic regression model
+simple_glm <- glm(turnout16_2016 ~ .,  family = "binomial", 
+                  data = voters_select)
+
+# Print the summary                  
+summary(simple_glm)
+
+# Load caret
+library(caret)
+
+# Split data into training and testing sets
+set.seed(1234)
+in_train <- createDataPartition(voters_select$turnout16_2016, 
+                p = .8, list = FALSE)
+training <- voters_select[in_train,]
+testing <- voters_select[-in_train,]
+
+# Perform logistic regression with upsampling and no resampling
+vote_glm <- train(turnout16_2016 ~ ., method = "glm", family = "binomial",
+                  data = training,
+                  trControl = trainControl(method = "none",
+                                           sampling = "up"))
+
+# Logistic regression
+vote_glm <- train(turnout16_2016 ~ ., method = "glm", family = "binomial",
+                  data = training,
+                  trControl = trainControl(method = "repeatedcv",
+                                           repeats = 2,
+                                           sampling = "up"))
+
+# Print vote_glm
+vote_glm
+
+# Random forest
+vote_rf <- train(turnout16_2016 ~ ., method = "rf", 
+                 data = training,
+                 trControl = trainControl(method = "repeatedcv",
+                                          repeats = 2,
+                                          sampling = "up"))
+
+# Print vote_rf
+vote_rf
+
+# Confusion matrix for logistic regression model on training data
+confusionMatrix(predict(vote_glm, training),
+                training$turnout16_2016)
+
+# Confusion matrix for random forest model on training data
+confusionMatrix(predict(vote_rf, training),
+                training$turnout16_2016)
+
+# Confusion matrix for logistic regression model on testing data
+confusionMatrix(predict(vote_glm, testing),
+    testing$turnout16_2016)
+
+# Confusion matrix for random forest model on testing data
+confusionMatrix(predict(vote_rf, testing),
+    testing$turnout16_2016)
+
+#######################
+
+### 4. But what do the nuns think? (Survey Data)
+
+# Load tidyverse
+library(tidyverse)
+
+# View sisters67
+glimpse(sisters67)
+
+# Plot the histogram
+ggplot(sisters67, aes(x = age)) +
+    geom_histogram(binwidth = 10)
+
+# Print the structure of sisters67
+glimpse(sisters67)
+
+# Tidy the data set
+tidy_sisters <- sisters67 %>%
+    select(-sister) %>%
+    gather(key, value, -age)
+
+# Print the structure of tidy_sisters
+glimpse(tidy_sisters)
+
+# Overall agreement with all questions varied by age
+tidy_sisters %>%
+    group_by(age) %>%
+    summarize(value = mean(value, na.rm = TRUE))
+
+# Number of respondents agreed or disagreed overall
+tidy_sisters %>%
+    count(value)
+
+# Visualize agreement with age
+tidy_sisters %>%
+    filter(key %in% paste0("v", 153:170)) %>%
+    group_by(key, value) %>%
+    summarize(age = mean(age, na.rm = TRUE)) %>%
+    ggplot(aes(value, age, color = key)) +
+    geom_line(show.legend = FALSE) +
+    facet_wrap(~key, nrow = 3)
+
+# Remove the sister column
+sisters_select <- sisters67 %>% 
+    select(-sister)
+
+# Build a simple linear regression model
+simple_lm <- lm(age ~ ., 
+                data = sisters_select)
+
+# Print the summary of the model
+summary(simple_lm)
+
+# Split the data into training and validation/test sets
+set.seed(1234)
+in_train <- createDataPartition(sisters_select$age, 
+                                p = .6, list = FALSE)
+training <- sisters_select[in_train, ]
+validation_test <- sisters_select[-in_train, ]
+
+# Split the validation and test sets
+set.seed(1234)
+in_test <- createDataPartition(validation_test$age, 
+                               p = .5, list = FALSE)
+testing <- validation_test[in_test, ]
+validation <- validation_test[-in_test, ]
+
+# Load caret
+library(caret)
+
+# Fit a CART model
+sisters_cart <- train(age ~ ., method = "rpart", data = training)
+
+# Print the CART model
+sisters_cart
+
+# Make predictions on the three models
+modeling_results <- validation %>%
+    mutate(CART = predict(sisters_cart, validation),
+           XGB = predict(sisters_xgb, validation),
+           GBM = predict(sisters_gbm, validation))
+
+# View the predictions
+modeling_results %>% 
+    select(CART, XGB, GBM)
+
+# Load yardstick
+library(yardstick)
+
+# Compare performace
+metrics(modeling_results, truth = age, estimate = CART)
+metrics(modeling_results, truth = age, estimate = XGB)
+metrics(modeling_results, truth = age, estimate = GBM)
+
+# Calculate RMSE
+testing %>%
+    mutate(prediction = predict(sisters_gbm, testing)) %>%
+    rmse(truth = age, estimate = prediction)
 
