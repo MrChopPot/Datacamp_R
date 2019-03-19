@@ -71,3 +71,141 @@ gbm_model <- train(diagnosis ~ .,
 
 ### 2. Hyperparameter tuning with caret
 
+# Define Cartesian grid
+man_grid <- expand.grid(degree = c(1, 2, 3), 
+                        scale = c(0.1, 0.01, 0.001), 
+                        C = 0.5)
+
+# Start timer, set seed & train model
+tic()
+set.seed(42)
+svm_model_voters_grid <- train(turnout16_2016 ~ ., 
+                   data = voters_train_data, 
+                   method = "svmPoly", 
+                   trControl = fitControl,
+                   verbose= FALSE,
+                   tuneGrid = man_grid)
+toc()
+
+# See the results
+svm_model_voters_grid
+
+# Plot default
+plot(svm_model_voters_grid)
+
+# Plot Kappa level-plot
+plot(svm_model_voters_grid, metric = "Kappa", plotType = "level")
+
+# Define the grid with hyperparameter ranges
+big_grid <- expand.grid(size = seq(from = 1, to = 5, by = 1), decay = c(0, 1))
+
+# Train control with grid search
+fitControl <- trainControl(method = "repeatedcv", number = 3, repeats = 5, search = "grid")
+
+# Train neural net
+tic()
+set.seed(42)
+nn_model_voters_big_grid <- train(turnout16_2016 ~ ., 
+                   data = voters_train_data, 
+                   method = "nnet", 
+                   trControl = fitControl,
+                   verbose = FALSE,
+                   tuneGrid = big_grid)
+toc()
+
+# Train control with random search
+fitControl <- trainControl(method = "repeatedcv",
+                           number = 3,
+                           repeats = 5,
+                           search = "random")
+
+# Test 6 random hyperparameter combinations
+tic()
+nn_model_voters_big_grid <- train(turnout16_2016 ~ ., 
+                   data = voters_train_data, 
+                   method = "nnet", 
+                   trControl = fitControl,
+                   verbose = FALSE,
+                   tuneLength = 6)
+toc()
+
+# Define trainControl function
+fitControl <- trainControl(method = "adaptive_cv",
+                           number = 3, repeats = 3,
+                           adaptive = list(min = 3, alpha = 0.05, method = "BT", complete = FALSE),
+                           search = "random")
+
+# Start timer & train model
+tic()
+svm_model_voters_ar <- train(turnout16_2016 ~ ., 
+                   data = voters_train_data, 
+                   method = "nnet", 
+                   trControl = fitControl,
+                   verbose = FALSE,
+                   tuneLength = 6)
+toc()
+
+#######################
+
+### 3. Hyperparameter tuning with mlr
+
+# Create classification taks
+task <- makeClassifTask(data = knowledge_train_data, 
+                        target = "UNS")
+
+# Call the list of learners
+listLearners() %>%
+ as.data.frame() %>%
+ select(class, short.name, package) %>%
+ filter(grepl("classif.", class))
+
+# Create learner
+lrn <- makeLearner("classif.randomForest", 
+                   predict.type = "prob", 
+                   fix.factors.prediction = TRUE)
+
+#######################
+
+### 4. Hyperparameter tuning with h2o
+
+# Initialise h2o cluster
+h2o.init()
+
+# Convert data to h2o frame
+seeds_train_data_hf <- as.h2o(seeds_train_data)
+
+# Identify target and features
+y <- "seed_type"
+x <- setdiff(colnames(seeds_train_data_hf), y)
+
+# Split data into train & validation sets
+sframe <- h2o.splitFrame(seeds_train_data_hf, seed = 42)
+train <- sframe[[1]]
+valid <- sframe[[2]]
+
+# Calculate ratio of the target variable in the training set
+summary(train$seed_type, exact_quantiles = TRUE)
+
+# Train random forest model
+rf_model <- h2o.randomForest(x = x,
+                             y = y,
+                             training_frame = train,
+                             validation_frame = valid)
+
+# Calculate model performance
+perf <- h2o.performance(rf_model, valid = TRUE)
+
+# Extract confusion matrix
+h2o.confusionMatrix(perf)
+
+# Extract logloss
+h2o.logloss(perf)
+
+
+
+
+
+
+
+
+
