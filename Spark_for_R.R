@@ -246,6 +246,164 @@ joined <- semi_join(track_metadata_tbl, artist_terms_tbl, by = "artist_id")
 # How many rows and columns are in the joined table?
 dim(joined)
 
+#######################
+
+### 3. Use The Native Interface to Manipulate Spark DataFrames
+
+# track_metadata_tbl has been pre-defined
+track_metadata_tbl
+
+hotttnesss <- track_metadata_tbl %>%
+  # Select artist_hotttnesss
+  select(artist_hotttnesss) %>%
+  # Binarize to is_hottt_or_nottt
+  ft_binarizer("artist_hotttnesss", "is_hottt_or_nottt", .5) %>%
+  # Collect the result
+  collect() %>%
+  # Convert is_hottt_or_nottt to logical
+  mutate(is_hottt_or_nottt = as.logical(is_hottt_or_nottt))
+
+# Draw a barplot of is_hottt_or_nottt
+ggplot(hotttnesss, aes(is_hottt_or_nottt)) +
+  geom_bar()
+
+# track_metadata_tbl, decades, decade_labels have been pre-defined
+track_metadata_tbl
+decades
+decade_labels
+
+hotttnesss_over_time <- track_metadata_tbl %>%
+  # Select artist_hotttnesss and year
+  select(artist_hotttnesss, year) %>%
+  # Convert year to numeric
+  mutate(year = as.numeric(year)) %>%
+  # Bucketize year to decade using decades vector
+  ft_bucketizer("year", "decade", splits = decades) %>%
+  # Collect the result
+  collect() %>%
+  # Convert decade to factor using decade_labels
+  mutate(decade = factor(decade, labels = decade_labels))
+
+# Draw a boxplot of artist_hotttnesss by decade
+ggplot(hotttnesss_over_time, aes(decade, artist_hotttnesss)) +
+  geom_boxplot()
+
+# track_metadata_tbl, duration_labels have been pre-defined
+track_metadata_tbl
+duration_labels
+
+familiarity_by_duration <- track_metadata_tbl %>%
+  # Select duration and artist_familiarity
+  select(duration, artist_familiarity) %>%
+  # Bucketize duration
+  ft_quantile_discretizer("duration", "duration_bin", n.buckets = 5) %>%
+  # Collect the result
+  collect() %>%
+  # Convert duration bin to factor
+  mutate(duration_bin = factor(duration_bin, labels = duration_labels))
+
+# Draw a boxplot of artist_familiarity by duration_bin
+ggplot(familiarity_by_duration, aes(duration_bin, artist_familiarity)) +
+  geom_boxplot()
+
+# track_metadata_tbl has been pre-defined
+track_metadata_tbl
+
+title_text <- track_metadata_tbl %>%
+  # Select artist_name, title
+  select(artist_name, title) %>%
+  # Tokenize title to words
+  ft_tokenizer("title", "word") %>%
+  # Collect the result
+  collect() %>%
+  # Flatten the word column 
+  mutate(word = lapply(word, as.character)) %>% 
+  # Unnest the list column
+  unnest()
+
+# title_text_tbl, afinn_sentiments_tbl have been pre-defined
+title_text_tbl
+afinn_sentiments_tbl
+
+sentimental_artists <- title_text_tbl %>%
+  # Inner join with sentiments on word field
+  inner_join(afinn_sentiments_tbl, by = "word") %>%
+  # Group by artist
+  group_by(artist_name) %>%
+  # Summarize to get positivity
+  summarize(positivity = sum(score))
+
+sentimental_artists %>%
+  # Arrange by ascending positivity
+  arrange(positivity) %>%
+  # Get top 5
+  top_n(5)
+
+sentimental_artists %>%
+  # Arrange by descending positivity
+  arrange(desc(positivity)) %>%
+  # Get top 5
+  top_n(5)
+
+# track_metadata_tbl has been pre-defined
+track_metadata_tbl
+
+track_metadata_tbl %>%
+  # Select artist_mbid column
+  select(artist_mbid) %>%
+  # Split it by hyphens
+  ft_regex_tokenizer("artist_mbid", "artist_mbid_chunks", pattern = "-")
+
+# track_metadata_tbl has been pre-defined
+track_metadata_tbl
+
+# Compare timings of arrange() and sdf_sort()
+microbenchmark(
+  arranged = track_metadata_tbl %>%
+    # Arrange by year, then artist_name, then release, then title
+    arrange(year, artist_name, release, title) %>%
+    # Collect the result
+    collect(),
+  sorted = track_metadata_tbl %>%
+    # Sort by year, then artist_name, then release, then title
+     sdf_sort(c("year", "artist_name", "release", "title")) %>%
+    # Collect the result
+    collect(),
+  times = 5
+)
+
+# track_metadata_tbl has been pre-defined
+track_metadata_tbl
+
+# Get the schema
+(schema <- sdf_schema(track_metadata_tbl))
+
+# Transform the schema
+schema %>%
+  lapply(function(x) do.call(data_frame, x)) %>%
+  bind_rows()
+
+# track_metadata_tbl has been pre-defined
+track_metadata_tbl
+
+track_metadata_tbl %>%
+  # Sample the data without replacement
+  sdf_sample(fraction = .01, replacement = FALSE, seed = 20000229) %>%
+  # Compute the result
+  compute("sample_track_metadata")
+
+# track_metadata_tbl has been pre-defined
+track_metadata_tbl
+
+partitioned <- track_metadata_tbl %>%
+  # Partition into training and testing sets
+  sdf_partition(training = 0.7, testing = 0.3)
+
+# Get the dimensions of the training set
+dim(partitioned$training)
+
+# Get the dimensions of the testing set
+dim(partitioned$testing)
 
 
 
