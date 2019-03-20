@@ -405,14 +405,162 @@ dim(partitioned$training)
 # Get the dimensions of the testing set
 dim(partitioned$testing)
 
+#######################
 
+### 4. Running Machine Learning Models on Spark
 
+# timbre has been pre-defined
+timbre
 
+# Calculate column means
+(mean_timbre <-  colMeans(timbre))
 
+# parquet_dir has been pre-defined
+parquet_dir
 
+# List the files in the parquet dir
+filenames <- dir(parquet_dir, full.names = TRUE)
 
+# Show the filenames and their sizes
+data_frame(
+  filename = basename(filenames),
+  size_bytes = file.size(filenames)
+)
 
+# Import the data into Spark
+timbre_tbl <- spark_read_parquet(spark_conn, "timbre", parquet_dir)
 
+# track_metadata_tbl, timbre_tbl pre-defined
+track_metadata_tbl
+timbre_tbl
 
+track_metadata_tbl %>%
+  # Inner join to timbre_tbl
+  inner_join(timbre_tbl, by = "track_id") %>%
+  # Convert year to numeric
+  mutate(year = as.numeric(year))
 
+# track_data_tbl has been pre-defined
+track_data_tbl
+
+training_testing_artist_ids <- track_data_tbl %>%
+  # Select the artist ID
+  select(artist_id) %>%
+  # Get distinct rows
+  distinct() %>%
+  # Partition into training/testing sets
+  sdf_partition(training = .7, testing = .3)
+
+track_data_to_model_tbl <- track_data_tbl %>%
+  # Inner join to training partition
+  inner_join(training_testing_artist_ids$training, by = "artist_id")
+
+track_data_to_predict_tbl <- track_data_tbl %>%
+  # Inner join to testing partition
+  inner_join(training_testing_artist_ids$testing, by = "artist_id")
+
+# track_data_to_model_tbl has been pre-defined
+track_data_to_model_tbl
+
+feature_colnames <- track_data_to_model_tbl %>%
+  # Get the column names (not names())
+  colnames() %>%
+  # Limit to the timbre columns
+  str_subset(fixed("timbre"))
+
+gradient_boosted_trees_model <- track_data_to_model_tbl %>%
+  # Run the gradient boosted trees model
+  ml_gradient_boosted_trees("year", feature_colnames)
+
+# training, testing sets & model are pre-defined
+track_data_to_model_tbl
+track_data_to_predict_tbl
+gradient_boosted_trees_model
+
+responses <- track_data_to_predict_tbl %>%
+  # Select the year column
+  select(year) %>%
+  # Collect the results
+  collect() %>%
+  # Add in the predictions
+  mutate(
+    predicted_year = predict(
+      gradient_boosted_trees_model,
+      track_data_to_predict_tbl
+    )
+  )
+
+# responses has been pre-defined
+responses
+
+# Draw a scatterplot of predicted vs. actual
+ggplot(responses, aes(actual, predicted)) +
+  # Add the points
+  geom_point(alpha = .1) +
+  # Add a line at actual = predicted
+  geom_abline(slope = 1, intercept = 0)
+
+residuals <- responses %>%
+  # Transmute response data to residuals
+  transmute(residual = predicted - actual)
+
+# Draw a density plot of residuals
+ggplot(residuals, aes(residual)) +
+    # Add a density curve
+    geom_density() +
+    # Add a vertical line through zero
+    geom_vline(xintercept = 0)
+
+# track_data_to_model_tbl has been pre-defined
+track_data_to_model_tbl
+
+# Get the timbre columns
+feature_colnames <- track_data_to_model_tbl %>% 
+    colnames() %>%
+    str_subset(fixed("timbre")) 
+
+# Run the random forest model
+random_forest_model <- track_data_to_model_tbl %>% 
+  ml_random_forest("year", feature_colnames)
+
+# training, testing sets & model are pre-defined
+track_data_to_model_tbl
+track_data_to_predict_tbl
+random_forest_model
+
+# Create a response vs. actual dataset
+responses <- track_data_to_predict_tbl %>%
+  select(year) %>%
+  collect() %>%
+  mutate(predicted_year = predict(random_forest_model, track_data_to_predict_tbl))
+
+# both_responses has been pre-defined
+both_responses
+
+# Draw a scatterplot of predicted vs. actual
+ggplot(both_responses, aes(actual, predicted, color = model)) +
+  # Add a smoothed line
+  geom_smooth() +
+  # Add a line at actual = predicted
+  geom_abline(intercept = 0, slope = 1)
+
+# Create a tibble of residuals
+residuals <- both_responses %>%
+  mutate(residual = predicted - actual)
+
+# Draw a density plot of residuals
+ggplot(residuals, aes(residual, color = model)) +
+    # Add a density curve
+    geom_density() +
+    # Add a vertical line through zero
+    geom_vline(xintercept = 0)
+
+# both_responses has been pre-defined
+both_responses
+
+# Create a residual sum of squares dataset
+both_responses %>%
+  mutate(residual = predicted - actual) %>%
+  group_by(model) %>%
+  summarize(rmse = sqrt(mean(residual ^ 2)))
 
