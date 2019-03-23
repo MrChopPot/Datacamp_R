@@ -135,5 +135,54 @@ which.max(wine$score_knn)
 # Find the row location of highest LOF
 which.max(wine$score_lof)
 
+#######################
 
+### 3. Isolation forest
+
+# Build an isolation tree 
+wine_tree <- iForest(wine, nt = 1)
+
+# Create isolation score
+wine$tree_score <- predict(wine_tree, newdata = wine)
+
+# Histogram plot of the scores
+hist(wine$tree_score, breaks = 40)
+
+# Fit isolation forest
+wine_forest <- iForest(wine, nt = 100, phi = 200)
+
+# Create isolation score from forest
+wine_score <- predict(wine_forest, wine)
+
+# Append score to the wine data
+wine$score <- wine_score
+
+# View the contents of the wine scores
+head(wine_scores)
+
+# Score scatterplot 2000 vs 1000 trees 
+plot(trees_2000 ~ trees_1000, data = wine_scores)
+
+# Add reference line of equality
+abline(a = 0, b = 1)
+
+# Sequence of values for pH and alcohol
+ph_seq <- seq(min(wine$pH),  max(wine$pH), length.out = 25)
+alcohol_seq <- seq(min(wine$alcohol),  max(wine$alcohol), length.out = 25)
+
+# Create a data frame of grid coordinates
+wine_grid <- expand.grid(pH = ph_seq, alcohol = alcohol_seq)
+
+# Visualise the grid using a scatterplot
+plot(pH ~ alcohol, data = wine_grid, pch = 20)
+
+# Calculate isolation score at grid locations
+wine_grid$score <- predict(wine_forest, wine_grid)
+
+# Contour plot of isolation scores
+contourplot(score ~ alcohol + pH, wine_grid, region = TRUE)
+
+#######################
+
+### 4. Comparing performance
 
