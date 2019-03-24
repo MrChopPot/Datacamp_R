@@ -186,3 +186,100 @@ contourplot(score ~ alcohol + pH, wine_grid, region = TRUE)
 
 ### 4. Comparing performance
 
+# View contents of thryoid data
+head(thyroid)
+
+# Tabulate the labels
+table(thyroid$label)
+
+# Proportion of thyroid cases
+prop_disease <- 22/(978+22)
+
+# Scatterplot showing TSH, T3 and anomaly labels
+plot(TSH ~ T3, data = thyroid, pch = 20, col = label + 1)
+
+# Scatterplot showing TT4, TBG and anomaly labels
+plot(TT4 ~ TBG, data = thyroid, pch = 20, col = label + 1)
+
+# Fit isolation forest
+thyroid_forest <- iForest(thyroid[, -1], nt = 200, phi = 100)
+
+# Anomaly score 
+thyroid$iso_score <- predict(thyroid_forest, thyroid[, -1])
+
+# Boxplot of the anomaly score against labels
+boxplot(iso_score ~ label, thyroid, col = "olivedrab4")
+
+# Scale the measurement columns of thyroid
+scaled_thyroid_measurements <- scale(thyroid[, -1])
+
+# Create a LOF score for the measurements
+lof_score <- lof(scaled_thyroid_measurements, k = 10)
+                 
+# Calculate high threshold for 
+high_lof <- quantile(lof_score, probs = 0.98)  
+
+# Append binary LOF score to thyroid data
+thyroid$binary_lof <- as.numeric(lof_score >= high_lof)
+                 
+# Calculate high threshold for iso_score
+high_iso <- quantile(iso_score, probs = 0.98)  
+
+# Append binary isolation score to thyroid data
+thyroid$binary_iso <- as.numeric(iso_score >= high_iso)
+
+# Tabulate agreement of label and binary isolation score 
+table(thyroid$label, thyroid$binary_iso)
+
+# Tabulate agreement of label and binary LOF score 
+table(thyroid$label, thyroid$binary_lof)
+
+# Proportion of binary_iso and label that agree
+iso_prop <- sum(diag(table(thyroid$label, thyroid$binary_iso))) 
+/ sum(table(thyroid$label, thyroid$binary_iso))
+
+# Proportion of binary_lof and label that agree
+lof_prop <- sum(diag(table(thyroid$label, thyroid$binary_lof))) 
+/ sum(table(thyroid$label, thyroid$binary_lof))
+
+# Tabulation for the binary isolation score
+table(thyroid$label, thyroid$binary_iso)
+# Precision for the isolation score
+precision_iso <- 12 / (8 + 12)
+# Recall for the isolation score
+recall_iso <- 12 / (12 + 10)
+
+# Tabulation for the binary lof score
+table(thyroid$label, thyroid$binary_lof)
+# Precision for the binary lof score
+precision_lof <- 0 / (20 + 0)
+# Recall for the binary lof score
+recall_lof <- 0 / (22 + 0)
+
+# Print the column classes in thyroid
+sapply(X = thyroid, FUN = class)
+
+# Convert column with character class to factor
+thyroid$age <- as.factor(thyroid$age)
+thyroid$sex <- as.factor(thyroid$sex)
+
+# Check that all columns are factor or numeric
+sapply(X = thyroid, FUN = class)
+
+# Check the class of age column
+class(thyroid$age)
+
+# Check the class of sex column
+class(thyroid$sex)
+
+# Fit an isolation forest with 100 trees
+thyroid_for <- iForest(thyroid[,-1], nt = 100)
+
+# Calculate Gower's distance matrix
+thyroid_dist <- daisy(thyroid[,-1], metric = "gower")
+
+# Generate LOF scores for thyroid data
+thyroid_lof <- lof(thyroid_dist, k = 10)
+
+# Range of values in the distance matrix
+range(as.matrix(thyroid_dist))
