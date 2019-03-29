@@ -124,12 +124,101 @@ head(discipline_logs)
 ggplot(discipline_logs, aes(hod)) +
 geom_histogram()
 
+##########################
 
+### 3. Transforming Numerical Features
 
+# Select the variables
+poke_vars <- poke_df %>%
+	select(Defense, Speed) 
 
+# Perform a Box-Cox transformation
+processed_vars <- preProcess(poke_vars, method = c("BoxCox"))
 
+# Use predict to transform data
+poke_df <- predict(processed_vars, poke_df)
 
+# Plot transformed features
+ggplot(poke_df, aes(x = Defense)) + 
+  geom_density()
 
+ggplot(poke_df, aes(x = Speed)) + 
+  geom_density()
+
+# Select both variables
+bank_vars <- bank_df %>%
+	select(balance, duration)
+    
+# Perform a Yeo-Johnson transformation 
+processed_vars <- preProcess(bank_vars, method = c("YeoJohnson"))
+
+# Use predict to transform data
+bank_df <- predict(processed_vars, bank_df)
+
+# Plot transformed features
+ggplot(bank_df,aes(x = balance)) + 
+  geom_density()
+
+ggplot(bank_df,aes(x = duration)) + 
+  geom_density()
+
+# Create a scaled new feature scaled_hp 
+poke_df <- poke_df %>%
+	mutate(scaled_hp = (HP - min(HP)) / 
+   (max(HP) - min(HP)))
+
+# Summarize both features
+poke_df %>% 
+	select(HP, scaled_hp) %>%
+	summary()
+
+# Use mutate to create column attack_mc
+poke_df <- poke_df %>%
+	mutate(attack_mc = Attack - mean(Attack))
+
+# Select variables 
+poke_vars <- poke_df %>% 
+	select(Attack, SpAtk, SpDef)
+
+# Use preProcess to mean center variables
+processed_vars <- preProcess(poke_vars, method = c("center"))
+
+# Use predict to include tranformed variables into data
+poke_df <- predict(processed_vars, poke_df)
+
+# Summarize the three new column scales
+poke_df %>% 
+	select(Attack, SpAtk, SpDef) %>%
+	summary()
+
+# Standardize Speed
+poke_df <- poke_df %>% 
+	mutate(z_speed = (Speed - mean(Speed))/
+  		sd(Speed))
+
+# Summarize new and original variable
+poke_df %>% 
+	select(Speed, z_speed) %>%
+	summary()
+
+# Select variables 
+poke_vars <- poke_df %>% 
+	select(Attack, Defense, SpAtk, SpDef)
+
+# Create preProcess variable list 
+processed_vars <- preProcess(poke_vars, method = c("center", "scale"))
+
+# Use predict to assign standardized variables
+poke_df <- predict(processed_vars, poke_df)
+
+# Summarize new variables
+poke_df %>% 
+	select(Attack, Defense, SpAtk, SpDef) %>% 
+	summary()
+
+#########################
+
+### 4. Advanced Methods
 
 
 
