@@ -220,10 +220,48 @@ poke_df %>%
 
 ### 4. Advanced Methods
 
+# Group the data and create a summary of the counts
+adult_incomes %>%
+  group_by(occupation, gender) %>%
+  summarize(n = n()) %>%
+  # Create a grouped bar graph
+  ggplot(., aes(occupation, n, fill = gender)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
 
+# Create a table of the variables of interest
+adult_incomes %>%
+  select(gender, occupation) %>%
+  table()
 
+# Create a feature cross between gender and occupation
+dmy <- dummyVars(~ gender:occupation, data = adult_incomes)
 
+# Create object of your resulting data frame
+oh_data <- predict(dmy, adult_incomes)
 
+# Summarize the resulting output
+summary(oh_data)
 
+# Create the df
+poke_x <- poke_df %>% 
+  select(HP, Attack, Defense, SpAtk, SpDef, Speed)
+
+# Perform PCA 
+poke_pca <- prcomp(poke_x, center = T, scale = T)
+
+# Calculate the proportion of variance
+prop_var <- prop_var %>%
+  mutate(pca_comp = 1:n(),
+  		pcVar = sdev^2, 
+        propVar_ex = pcVar/sum(pcVar))
+
+# Create a plot of the components and proportion of variance
+ggplot(prop_var, aes(pca_comp, propVar_ex, group = 1)) + 
+  geom_line() +
+  geom_point()
+
+# Create a plot of the first two components
+autoplot(poke_pca, data = poke_df, colour = 'Type1')
 
 
