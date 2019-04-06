@@ -1,3 +1,5 @@
+### Hyperparameter Tuning in R
+
 ### 1. Introduction to hyperparameters
 
 # Fit a linear model on the breast_cancer_data.
@@ -164,6 +166,70 @@ lrn <- makeLearner("classif.randomForest",
                    predict.type = "prob", 
                    fix.factors.prediction = TRUE)
 
+# Get the parameter set for neural networks of the nnet package
+getParamSet("classif.nnet")
+
+# Define set of parameters
+param_set <- makeParamSet(
+  makeDiscreteParam("size", values = c(2,3,5)),
+  makeNumericParam("decay", lower = 0.0001, upper = 0.1)
+)
+
+# Print parameter set
+print(param_set)
+
+# Define a random search tuning method.
+ctrl_random <- makeTuneControlRandom()
+
+# Define a random search tuning method.
+ctrl_random <- makeTuneControlRandom(maxit = 6)
+
+# Define a 3 x 3 repeated cross-validation scheme
+cross_val <- makeResampleDesc("RepCV", folds = 3 * 3)
+
+# Tune hyperparameters
+tic()
+lrn_tune <- tuneParams(lrn,
+                       task,
+                       resampling = cross_val,
+                       control = ctrl_random,
+                       par.set = param_set)
+toc()
+
+# Create holdout sampling
+holdout <- makeResampleDesc("Holdout")
+
+# Perform tuning
+lrn_tune <- tuneParams(learner = lrn, task = task, resampling = holdout, control = ctrl_random, par.set = param_set)
+
+# Generate hyperparameter effect data
+hyperpar_effects <- generateHyperParsEffectData(lrn_tune, partial.dep = TRUE)
+
+# Plot hyperparameter effects
+plotHyperParsEffect(hyperpar_effects, 
+    partial.dep.learn = "regr.glm",
+    x = "minsplit", y = "mmce.test.mean", z = "maxdepth",
+    plot.type = "line")
+
+# Create holdout sampling
+holdout <- makeResampleDesc("Holdout", predict = "both")
+
+# Perform tuning
+lrn_tune <- tuneParams(learner = lrn, 
+                       task = task, 
+                       resampling = holdout, 
+                       control = ctrl_random, 
+                       par.set = param_set,
+                       measures = list(mmce, setAggregation(mmce, train.mean), acc, setAggregation(acc, train.mean)))
+
+# Set hyperparameters
+lrn_best <- setHyperPars(lrn, par.vals = list(size = 1, 
+                                              maxit = 150, 
+                                              decay = 0))
+
+# Train model
+model_best <- train(lrn_best, task)
+
 #######################
 
 ### 4. Hyperparameter tuning with h2o
@@ -201,11 +267,49 @@ h2o.confusionMatrix(perf)
 # Extract logloss
 h2o.logloss(perf)
 
+# Define hyperparameters
+dl_params <- list(hidden = list(c(50, 50), c(100, 100)),
+                  epochs = c(5, 10, 15),
+                  rate = c(0.001, 0.005, 0.01))
 
+# Define search criteria
+search_criteria <- list(strategy = "RandomDiscrete", 
+                        max_runtime_secs = 10, # this is way too short & only used to keep runtime short!
+                        seed = 42)
 
+# Train with random search
+dl_grid <- h2o.grid("deeplearning", 
+                    grid_id = "dl_grid",
+                    x = x, 
+                    y = y,
+                    training_frame = train,
+                    validation_frame = valid,
+                    seed = 42,
+                    hyper_params = dl_params,
+                    search_criteria = search_criteria)
 
+# Define early stopping
+stopping_params <- list(strategy = "RandomDiscrete", 
+                        stopping_metric = "misclassification",
+                        stopping_rounds = 2, 
+                        stopping_tolerance = .1,
+                        seed = 42)
 
+# Run automatic machine learning
+automl_model <- h2o.automl(x = x, 
+                           y = y,
+                           training_frame = train,
+                           max_runtime_secs = 10,
+                           sort_metric = "mean_per_class_error",
+                           leaderboard = valid,
+                           seed = 42)
 
+# Extract the leaderboard
+lb <- automl_model@leaderboard
+head(lb)
 
+# Assign best model new object name
+aml_leader <- automl_model@leader
 
-
+# Look at best model
+summary(aml_leader)
