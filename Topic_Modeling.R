@@ -174,6 +174,155 @@ for (j in 1:4) {
 
 #######################
 
-### 3. 
+### 3. Named entity recognition as unsupervised classification
+
+# Fit a topic model using LDA with Gibbs sampling
+mod = LDA(x=dtm, k=2, method = "Gibbs", 
+          control=list(iter = 500, thin = 1,
+                       seed = 12345,
+                       alpha = NULL)) # alpha = 50/k
+
+# Display topic prevalance in documents as a table
+tidy(mod, "gamma") %>% spread(topic, gamma)  
+
+# Fit the model for delta = 0.1
+mod <- LDA(x=dtm, k=2, method="Gibbs",
+         control=list(iter=500, seed=12345, alpha=1, delta=.1))
+
+# Define which words we want to examine
+my_terms = c("loans", "bank", "opened", "pay", "restaurant", "you")
+
+# Make a tidy table
+t <- tidy(mod, "beta") %>% filter(term %in% my_terms)
+
+# Make a stacked column chart of word probabilities
+ggplot(t, aes(x=term, y=beta)) + geom_col(aes(fill=factor(topic))) +
+  theme(axis.text.x=element_text(angle=90))
+
+# Fit the model for delta = 0.5
+mod <- LDA(x=dtm, k=2, method="Gibbs",
+         control=list(iter=500, seed=12345, alpha=1, delta=.5))
+
+# Define which words we want to examine
+my_terms = c("loans", "bank", "opened", "pay", "restaurant", "you")
+
+# Make a tidy table
+t <- tidy(mod, "beta") %>% filter(term %in% my_terms)
+
+# Make a stacked column chart
+ggplot(t, aes(x=term, y=beta)) + geom_col(aes(fill=factor(topic))) +
+  theme(axis.text.x=element_text(angle=90))
+
+# Regex pattern for an entity and word context
+p1 <- "( [a-z]+){2}( (St[.] )?[A-Z][a-z]+)+( [a-z]+){2}"
+
+# Obtain the regex match object from gregexpr
+m <- gregexpr(p1, text)
+
+# Get the matches and flatten the list
+v <- unlist(regmatches(text, m))
+
+# Find the number of elements in the vector
+length(v)
+
+# Regex pattern for an entity and word context
+p2 <- "( [a-z]+){2}( (St[.] )?[A-Z][a-z]+( (of|the) [A-Z][a-z]+)?)+( [a-z]+){2}"
+
+# Obtain the regex match object from gregexpr
+m <- gregexpr(p2, text)
+
+# Get the matches and flatten the list
+v <- unlist(regmatches(text, m))
+
+# Find the number of elements in the vector
+length(v)
+
+# Print out contents of the `entity_pattern`
+entity_pattern
+
+# Remove the named entity from text
+v2 <- gsub(entity_pattern, "", v)
+
+# Display the head of v2
+head(v2)
+
+# Remove the named entity
+v2 <- gsub(entity_pattern, "", v)
+
+# Pattern for inserting suffixes
+p <- "\\1_L1 \\2_L2 \\3_R1 \\4_R2"
+
+# Add suffixes to words
+context <- gsub("([a-z]+) ([a-z]+) ([a-z]+) ([a-z]+)", p, v2)
+
+# Extract named entity and use it as document ID
+re_match <-  gregexpr(entity_pattern, v)
+doc_id <- unlist(regmatches(v, re_match))
+
+# Make a data frame with columns doc_id and text
+corpus <- data.frame(doc_id = doc_id, text = context, stringsAsFactors = F)
+
+# Summarize the text to produce a document for each doc_id
+corpus2 <- corpus %>% group_by(doc_id) %>% 
+  summarise(doc = paste(text, collapse=" "))
+
+# Make a document-term matrix
+dtm <- corpus2 %>% unnest_tokens(input=doc, output=word) %>% 
+  count(doc_id, word) %>% 
+  cast_dtm(document=doc_id, term=word, value=n)
+
+# Fit an LDA model for 3 topics
+mod <- LDA(x=dtm, k=3, method="Gibbs", 
+          control=list(alpha=1, seed=12345, iter=1000, thin=1))
+
+# Create a table with probabilities of topics in documents
+topics <- tidy(mod, matrix="gamma") %>% 
+  spread(topic, gamma)
+
+# Set random seed for reproducability
+set.seed(12345)
+
+# Take a sample of 20 random integers, without replacement
+r <- sample.int(n=nrow(corpus2), size=20, replace=FALSE)
+
+# Generate a document-term matrix
+train_dtm <- corpus2[-r, ] %>% unnest_tokens(input=doc, output=word) %>% 
+  count(doc_id, word) %>% 
+  cast_dtm(document=doc_id, term=word, value=n)
+
+# Fit an LDA topic model for k=3
+train_mod <- LDA(x=train_dtm, k=3, method="Gibbs",
+                control=list(alpha=1, seed=10001,
+                             iter=1000, thin=1))
+
+# Get the test row indices
+set.seed(12345)
+r <- sample.int(n=nrow(corpus2), size=20, replace=FALSE)
+
+# Extract the vocabulary of the training model
+model_vocab <- tidy(train_mod, matrix="beta") %>% 
+  select(term) %>% distinct()
+
+# Create a table of counts with aligned vocabularies
+test_table <- corpus2[r, ] %>% unnest_tokens(input=doc, output=word) %>% 
+  count(doc_id, word) %>%
+  right_join(model_vocab, by=c("word"="term"))
+
+# Prepare a document-term matrix
+test_dtm <- test_table %>% 
+  arrange(desc(doc_id)) %>% 
+  mutate(doc_id = ifelse(is.na(doc_id), first(doc_id), doc_id),
+      n = ifelse(is.na(n), 0, n)) %>% 
+  cast_dtm(document=doc_id, term=word, value=n)
+
+# Obtain posterior probabilities for test documents
+results <- posterior(object=train_mod, newdata=test_dtm)
+
+# Display the matrix with topic probabilities
+results$topics
+
+#######################
+
+### 4. How many topics is enough?
 
 
