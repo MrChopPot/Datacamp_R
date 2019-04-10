@@ -97,7 +97,8 @@ frequency_fun <- function(steps, channel) {
 }
 
 # Create freq_channel feature
-freq_channel <- rollapply(trans_Bob$transfer_id, width = list(-1:-length(trans_Bob$transfer_id)), partial = T, FUN = frequency_fun, trans_Bob$channel_cd)
+freq_channel <- rollapply(trans_Bob$transfer_id, width = list(-1:-length(trans_Bob$transfer_id)), 
+  partial = T, FUN = frequency_fun, trans_Bob$channel_cd)
 
 # Print the features channel_cd, freq_channel and fraud_flag next to each other
 freq_channel <- c(0, freq_channel)
@@ -269,26 +270,109 @@ print(account_info)
 
 ### 3. Imbalanced class distributions
 
+# Make a scatter plot
+ggplot(transfers, aes(x = amount, y = orig_balance_before)) +
+  geom_point(aes(color = fraud_flag, shape = fraud_flag)) +
+  scale_color_manual(values = c('dodgerblue', 'red'))
 
+# Load ROSE
+library(ROSE)
 
+# Calculate the required number of cases in the over-sampled dataset
+n_new <- as.numeric(table(creditcard$Class))[1] / 0.6667
 
+# Over-sample
+oversampling_result <- ovun.sample(formula = Class ~ ., data = creditcard,method = "over", N = n_new, seed = 2018)
 
+# Verify the Class-balance of the over-sampled dataset
+oversampled_credit <- oversampling_result$data
+prop.table(table(oversampled_credit$Class))
 
+# Load ROSE
+library(ROSE)
 
+# Calculate the required number of cases in the over-sampled dataset
+n_new <- as.numeric(table(creditcard$Class))[2] / 0.4
 
+# Under-sample
+undersampling_result <- ovun.sample(formula = Class ~ ., data = creditcard, method = "under", N = n_new, seed = 2018)
 
+# Verify the Class-balance of the under-sampled dataset
+undersampled_credit <- undersampling_result$data
+prop.table(table(under_credit$Class))
 
+# Load ROSE
+library(ROSE)
 
+# Specify the desired number of cases in the balanced dataset and the fraction of fraud cases
+n_new <- 10000
+fraud_fraction <- 0.3
 
+# Combine ROS & RUS!
+sampling_result <- ovun.sample(formula = Class ~ ., data = creditcard, method = "both", N = n_new,  p = fraud_fraction, seed = 2018)
 
+# Verify the Class-balance of the re-balanced dataset
+sampled_credit <- sampling_result$data
+prop.table(table(sampled_credit$Class))
 
+# Set the number of fraud and legitimate cases, and the desired percentage of legitimate cases
+n0 <- nrow(creditcard[creditcard$Class==0,]); n1 <- nrow(creditcard[creditcard$Class==1,]); r0 <- 0.6
 
+# Calculate the value for the dup_size parameter of SMOTE
+ntimes <- ((1 - r0) / r0) * (n0 / n1) - 1
 
+# Create synthetic fraud cases with SMOTE
+smote_output <- SMOTE(X = creditcard[ , -c(1, 31, 32)], target = creditcard$Class, K = 5, dup_size = ntimes)
 
+# Make a scatter plot of the original and over-sampled dataset
+credit_smote <- smote_output$data
+colnames(credit_smote)[30] <- "Class"
+prop.table(table(credit_smote$Class))
 
+ggplot(creditcard, aes(x = V1, y = V2, color = Class)) +
+  geom_point() +
+  scale_color_manual(values = c('dodgerblue2', 'red'))
 
+ggplot(credit_smote, aes(x = V1, y = V2, color = Class)) +
+  geom_point() +
+  scale_color_manual(values = c('dodgerblue2', 'red'))
 
+# Train the rpart algorithm on the original training set and the SMOTE-rebalanced training set
+model_orig <- rpart(Class ~ ., data = train_original)
+model_smote <- rpart(Class ~ ., data = train_oversampled)
 
+# Predict the fraud probabilities of the test cases
+scores_orig <- predict(model_orig, newdata = test, type = "prob")[, 2]
+scores_smote <- predict(model_smote, newdata = test, type = "prob")[, 2]
 
+# Convert the probabilities to classes (0 or 1) using a cutoff value
+predicted_class_orig <- factor(ifelse(scores_orig > 0.5, 1, 0))
+predicted_class_smote <- factor(ifelse(scores_smote > 0.5, 1, 0))
 
+# Determine the confusion matrices and the model's accuracy
+CM_orig <- confusionMatrix(data = predicted_class_orig, reference = test$Class)
+CM_smote <- confusionMatrix(data = predicted_class_smote, reference = test$Class)
+print(CM_orig$table)
+print(CM_orig$overall[1])
+print(CM_smote$table)
+print(CM_smote$overall[1])
+
+# Define the cost_model function to calculate cost
+cost_model <- function(predicted.classes, true.classes, amounts, fixedcost) {
+  library(hmeasure)
+  predicted.classes <- relabel(predicted.classes)
+  true.classes <- relabel(true.classes)
+  cost <- sum(true.classes * (1 - predicted.classes) * amounts + predicted.classes * fixedcost)
+  return(cost)
+}
+
+# Calculate the total cost of deploying the original model
+cost_model(predicted_class_orig, test$Class, test$Amount, 10)
+
+# Calculate the total cost of deploying the model using SMOTE
+cost_model(predicted_class_smote, test$Class, test$Amount, 10)
+
+#######################
+
+### 4. Digit analysis and robust statistics
 
