@@ -325,4 +325,98 @@ results$topics
 
 ### 4. How many topics is enough?
 
+# Split the Abstract column into tokens
+dtm <- df %>% unnest_tokens(input=Abstract, output=word) %>% 
+   # Remove stopwords
+   anti_join(stop_words) %>% 
+   # Count the number of occurrences
+   count(AwardNumber, word) %>% 
+   # Create a document term matrix
+   cast_dtm(document=AwardNumber, term=word, value=n)
 
+dtm <- df %>% unnest_tokens(input=Abstract, output=word) %>% 
+   anti_join(stop_words) %>% 
+   # Count occurences within documents
+   count(AwardNumber, word) %>%
+   # Group the data
+   group_by(word) %>% 
+   # Filter for corpus wide frequency
+   filter(sum(n) >= 10) %>% 
+   # Ungroup the data andreate a document term matrix
+   ungroup() %>% 
+   cast_dtm(document=AwardNumber, term=word, value=n)
+
+# Create a LDA model
+mod <- LDA(x=dtm, method="Gibbs", k=3, 
+          control=list(alpha=0.5, seed=1234, iter=500, thin=1))
+
+# Retrieve log-likelihood
+logLik(mod)
+
+# Find perplexity
+perplexity(object=mod, newdata=dtm)
+
+# Display names of elements in the list
+names(models[[1]])
+
+# Retrieve the values of k and perplexity, and plot perplexity vs k
+x <- sapply(models, '[[', 'k')
+y <- sapply(models, '[[', 'perplexity')
+plot(x, y, xlab="number of clusters, k", ylab="perplexity score", type="o")
+
+# Record the new perplexity scores
+new_perplexity_score <- numeric(length(models))
+
+# Run each model for 100 iterations
+for (i in seq_along(models)) {
+  mod2 <- LDA(x=dtm, model=models[[i]]$model,
+             control=list(iter=100, seed=12345, thin=1))
+  new_perplexity_score[i] <- perplexity(object=mod2, newdata=dtm)
+}
+
+# Specify the possible values of k and build the plot
+k <- 2:10
+plot(x=k, y=new_perplexity_score, xlab="number of clusters, k", 
+     ylab="perplexity score", type="o")
+
+t <- history %>% 
+        # Unnest the tokens
+    unnest_tokens(input=text, output=word) %>% 
+        # Create a word index column
+    mutate(word_index = 1:n()) %>% 
+        # Create a document number column
+    mutate(document_number = word_index %/% 1000 + 1)
+
+dtm <- t %>% 
+    # Join verbs on "word" and "past"
+  inner_join(verbs, by=c("word"="past")) %>% 
+    # Count word
+  count(document_number, word) %>% 
+    # Create a document-term matrix
+  cast_dtm(document=document_number, term=word, value=n)
+
+# Store the names of documents in a vector
+required_documents <- c(" Africa", " Emperor Heraclius", 
+                       " Adrianople", " Daniel", " African")
+
+# Convert table into wide format
+tidy(mod, matrix="gamma") %>% 
+   spread(key=topic, value=gamma) %>% 
+   # Keep only the rows with document names matching the required documents
+   filter(document %in% required_documents)
+
+# Set up the column names
+colnames(seedwords) <- colnames(dtm)
+
+# Set the weights
+seedwords[1, "defeated_l2"] = 1
+seedwords[2, "across_l2"] = 1
+
+# Fit the topic model
+mod <- LDA(dtm, k=3, method="Gibbs",
+         seedwords=seedwords,
+         control=list(alpha=1, iter=500, seed=1234))
+
+# Examine topic assignment in the fitted model
+tidy(mod, "gamma") %>% spread(topic, gamma) %>% 
+  filter(document %in% c(" Daniel", " Adrianople", " African"))
