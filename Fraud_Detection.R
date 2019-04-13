@@ -376,3 +376,87 @@ cost_model(predicted_class_smote, test$Class, test$Amount, 10)
 
 ### 4. Digit analysis and robust statistics
 
+# Implement Benford's Law for first digit
+benlaw <- function(d) log10(1 + 1 / d)
+
+# Calculate expected frequency for d=5
+benlaw(5)
+
+# Create a dataframe of the 9 digits and their Benford's Law probabilities
+df <- data.frame(digit = 1:9, probability = benlaw(1:9))
+
+# Create barplot with expected frequencies
+ggplot(df, aes(x = digit, y = probability)) + 
+  geom_bar(stat = "identity", fill = "dodgerblue") + 
+  xlab("First digit") + ylab("Expected frequency") + 
+  scale_x_continuous(breaks = 1:9, labels = 1:9) + 
+  ylim(0, 0.33) + theme(text = element_text(size = 25))
+
+# Load package benford.analysis
+library(benford.analysis)
+data(census.2009)
+
+# Check conformity
+bfd.cen <- benford(census.2009$pop.2009, number.of.digits = 1) 
+plot(bfd.cen, except = c("second order", "summation", "mantissa", 
+  "chi squared","abs diff", "ex summation", "Legend"), multiple = F) 
+
+# Multiply the data by 3 and check conformity again
+data <- census.2009$pop.2009 * 3
+bfd.cen3 <- benford(data, number.of.digits = 1)
+plot(bfd.cen3, except = c("second order", "summation", "mantissa", 
+  "chi squared","abs diff", "ex summation", "Legend"), multiple = F)
+
+# Validate data against Benford's Law using first digit
+bfd.ins <- benford(fireinsuranceclaims, number.of.digits = 1) 
+plot(bfd.ins, except=c("second order", "summation", "mantissa", 
+  "chi squared","abs diff", "ex summation", "Legend"), multiple = F)
+
+# Validate data against Benford's Law using first-two digits
+bfd.ins2 <- benford(fireinsuranceclaims, number.of.digits = 2)
+plot(bfd.ins2, except=c("second order", "summation", "mantissa", 
+  "chi squared","abs diff", "ex summation", "Legend"), multiple = F)
+
+# Validate data against Benford's Law using first digit
+bfd.exp <- benford(expensesCEO, number.of.digits = 1) 
+plot(bfd.exp, except=c("second order", "summation", "mantissa", 
+  "chi squared","abs diff", "ex summation", "Legend"), multiple = F)
+
+# Validate data against Benford's Law using first-two digits
+bfd.exp2 <- benford(expensesCEO, number.of.digits = 2) 
+plot(bfd.exp2, except=c("second order", "summation", "mantissa", 
+  "chi squared","abs diff", "ex summation", "Legend"), multiple = F)
+
+# Get observations identified as fraud
+which(transfers$fraud_flag == 1)
+
+# Compute median and mean absolute deviation for `amount`
+m <- median(transfers$amount)
+s <- mad(transfers$amount)
+
+# Compute robust z-score for each observation
+robzscore <- abs((transfers$amount - m) / (s))
+
+# Get observations with robust z-score higher than 3 in absolute value
+which(abs(robzscore) > 3)
+
+# Create boxplot
+bp.thexp <- boxplot(thexp, col = "lightblue", main = "Standard boxplot", ylab = "Total household expenditure")
+
+# Extract the outliers from the data
+bp.thexp$out
+
+# Create adjusted boxplot
+adj.thexp <- adjbox(thexp, col = "lightblue", main = "Adjusted boxplot", ylab = "Total household expenditure")
+
+# Create a scatterplot of the data
+plot(hailinsurance, xlab = "price house", ylab = "claim")
+
+# Compute robust estimates for location and scatter
+mcdresult <- covMcd(hailinsurance)
+robustcenter <- mcdresult$center
+robustcov <- mcdresult$cov
+
+# Add robust 97.5% tolerance ellipsoid
+rad <- sqrt(qchisq(0.975, 2))
+ellipse(center = robustcenter, shape = robustcov, radius = rad, col = "red")
