@@ -449,6 +449,17 @@ bp.thexp$out
 # Create adjusted boxplot
 adj.thexp <- adjbox(thexp, col = "lightblue", main = "Adjusted boxplot", ylab = "Total household expenditure")
 
+# Create a scatterplot
+plot(hailinsurance, xlab = "price house", ylab = "claim")
+
+# Compute the sample mean and sample covariance matrix
+clcenter <- colMeans(hailinsurance)
+clcov <- cov(hailinsurance)
+
+# Add 97.5% tolerance ellipsoid
+rad <- sqrt(qchisq(0.975, 2))
+ellipse(center = clcenter, shape = clcov, radius = rad, col = "blue", lty = 2)
+
 # Create a scatterplot of the data
 plot(hailinsurance, xlab = "price house", ylab = "claim")
 
